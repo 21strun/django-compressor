@@ -132,124 +132,125 @@ class Command(NoArgsCommand):
                                          "must set TEMPLATE_LOADERS in your "
                                          "settings.")
 
-        engine = options.get('engine', 'django')
-
-        paths = set()
-        if engine != 'jinja2':
-            for loader in self.get_loaders():
-                try:
-                    module = import_module(loader.__module__)
-                    get_template_sources = getattr(module,
-                        'get_template_sources', None)
-                    if get_template_sources is None:
-                        get_template_sources = loader.get_template_sources
-                    paths.update(list(get_template_sources('')))
-                except (ImportError, AttributeError, TypeError):
-                    # Yeah, this didn't work out so well, let's move on
-                    pass
-
-        if paths and verbosity > 1:
-            log.write("Considering paths:\n\t" + "\n\t".join(paths) + "\n")
-
-        # Find templates from paths collected by django's template loaders
-        templates = set()
-        for path in paths:
-            for root, dirs, files in os.walk(path,
-                    followlinks=options.get('followlinks', False)):
-                templates.update(os.path.join(root, name)
-                    for name in files if not name.startswith('.') and
-                        any(fnmatch(name, "*%s" % glob) for glob in extensions))
-
-        # Find templates from paths collected by Jinja2's loaders
-        if engine == 'jinja2' and django.VERSION >= (1, 8):
-            env = settings.COMPRESS_JINJA2_GET_ENVIRONMENT()
-            templates |= set([env.loader.get_source(env, template)[1] for template in
-                              env.list_templates(filter_func=lambda _path:
-                              os.path.splitext(_path)[-1] in extensions)])
-
-        if not templates:
-            raise OfflineGenerationError("No templates found. Make sure your "
-                                         "TEMPLATE_LOADERS and TEMPLATE_DIRS "
-                                         "settings are correct.")
-        if verbosity > 1:
-            log.write("Found templates:\n\t" + "\n\t".join(templates) + "\n")
-
-        parser = self.__get_parser(engine)
-
-        compressor_nodes = SortedDict()
-        for template_name in templates:
-            try:
-                template = parser.parse(template_name)
-            except IOError:  # unreadable file -> ignore
-                if verbosity > 0:
-                    log.write("Unreadable template at: %s\n" % template_name)
-                continue
-            except TemplateSyntaxError as e:  # broken template -> ignore
-                if verbosity > 0:
-                    log.write("Invalid template %s: %s\n" % (template_name, e))
-                continue
-            except TemplateDoesNotExist:  # non existent template -> ignore
-                if verbosity > 0:
-                    log.write("Non-existent template at: %s\n" % template_name)
-                continue
-            except UnicodeDecodeError:
-                if verbosity > 0:
-                    log.write("UnicodeDecodeError while trying to read "
-                              "template %s\n" % template_name)
-            try:
-                nodes = list(parser.walk_nodes(template))
-            except (TemplateDoesNotExist, TemplateSyntaxError) as e:
-                # Could be an error in some base template
-                if verbosity > 0:
-                    log.write("Error parsing template %s: %s\n" % (template_name, e))
-                continue
-            if nodes:
-                template.template_name = template_name
-                compressor_nodes.setdefault(template, []).extend(nodes)
-
-        if not compressor_nodes:
-            raise OfflineGenerationError(
-                "No 'compress' template tags found in templates."
-                "Try running compress command with --follow-links and/or"
-                "--extension=EXTENSIONS")
-
-        if verbosity > 0:
-            log.write("Found 'compress' tags in:\n\t" +
-                      "\n\t".join((t.template_name
-                                   for t in compressor_nodes.keys())) + "\n")
-
-        log.write("Compressing... ")
         count = 0
         results = []
         offline_manifest = SortedDict()
-        init_context = parser.get_init_context(settings.COMPRESS_OFFLINE_CONTEXT)
+        for engine in ('django', 'jinja2'):
 
-        for template, nodes in compressor_nodes.items():
-            context = Context(init_context)
-            template._log = log
-            template._log_verbosity = verbosity
+            paths = set()
+            if engine != 'jinja2':
+                for loader in self.get_loaders():
+                    try:
+                        module = import_module(loader.__module__)
+                        get_template_sources = getattr(module,
+                            'get_template_sources', None)
+                        if get_template_sources is None:
+                            get_template_sources = loader.get_template_sources
+                        paths.update(list(get_template_sources('')))
+                    except (ImportError, AttributeError, TypeError):
+                        # Yeah, this didn't work out so well, let's move on
+                        pass
 
-            if not parser.process_template(template, context):
-                continue
+            if paths and verbosity > 1:
+                log.write("Considering paths:\n\t" + "\n\t".join(paths) + "\n")
 
-            for node in nodes:
-                context.push()
-                parser.process_node(template, context, node)
-                rendered = parser.render_nodelist(template, context, node)
-                key = get_offline_hexdigest(rendered)
+            # Find templates from paths collected by django's template loaders
+            templates = set()
+            for path in paths:
+                for root, dirs, files in os.walk(path,
+                        followlinks=options.get('followlinks', False)):
+                    templates.update(os.path.join(root, name)
+                        for name in files if not name.startswith('.') and
+                            any(fnmatch(name, "*%s" % glob) for glob in extensions))
 
-                if key in offline_manifest:
+            # Find templates from paths collected by Jinja2's loaders
+            if engine == 'jinja2' and django.VERSION >= (1, 8):
+                env = settings.COMPRESS_JINJA2_GET_ENVIRONMENT()
+                templates |= set([env.loader.get_source(env, template)[1] for template in
+                                  env.list_templates(filter_func=lambda _path:
+                                  os.path.splitext(_path)[-1] in extensions)])
+
+            if not templates:
+                raise OfflineGenerationError("No templates found. Make sure your "
+                                             "TEMPLATE_LOADERS and TEMPLATE_DIRS "
+                                             "settings are correct.")
+            if verbosity > 1:
+                log.write("Found templates:\n\t" + "\n\t".join(templates) + "\n")
+
+            parser = self.__get_parser(engine)
+
+            compressor_nodes = SortedDict()
+            for template_name in templates:
+                try:
+                    template = parser.parse(template_name)
+                except IOError:  # unreadable file -> ignore
+                    if verbosity > 0:
+                        log.write("Unreadable template at: %s\n" % template_name)
+                    continue
+                except TemplateSyntaxError as e:  # broken template -> ignore
+                    if verbosity > 0:
+                        log.write("Invalid template %s: %s\n" % (template_name, e))
+                    continue
+                except TemplateDoesNotExist:  # non existent template -> ignore
+                    if verbosity > 0:
+                        log.write("Non-existent template at: %s\n" % template_name)
+                    continue
+                except UnicodeDecodeError:
+                    if verbosity > 0:
+                        log.write("UnicodeDecodeError while trying to read "
+                                  "template %s\n" % template_name)
+                try:
+                    nodes = list(parser.walk_nodes(template))
+                except (TemplateDoesNotExist, TemplateSyntaxError) as e:
+                    # Could be an error in some base template
+                    if verbosity > 0:
+                        log.write("Error parsing template %s: %s\n" % (template_name, e))
+                    continue
+                if nodes:
+                    template.template_name = template_name
+                    compressor_nodes.setdefault(template, []).extend(nodes)
+
+            if not compressor_nodes:
+                raise OfflineGenerationError(
+                    "No 'compress' template tags found in templates."
+                    "Try running compress command with --follow-links and/or"
+                    "--extension=EXTENSIONS")
+
+            if verbosity > 0:
+                log.write("Found 'compress' tags in:\n\t" +
+                          "\n\t".join((t.template_name
+                                       for t in compressor_nodes.keys())) + "\n")
+
+            log.write("Compressing %s... " % engine)
+
+            init_context = parser.get_init_context(settings.COMPRESS_OFFLINE_CONTEXT)
+
+            for template, nodes in compressor_nodes.items():
+                context = Context(init_context)
+                template._log = log
+                template._log_verbosity = verbosity
+
+                if not parser.process_template(template, context):
                     continue
 
-                try:
-                    result = parser.render_node(template, context, node)
-                except Exception as e:
-                    raise CommandError("An error occured during rendering %s: "
-                                       "%s" % (template.template_name, e))
-                offline_manifest[key] = result
-                context.pop()
-                results.append(result)
-                count += 1
+                for node in nodes:
+                    context.push()
+                    parser.process_node(template, context, node)
+                    rendered = parser.render_nodelist(template, context, node)
+                    key = get_offline_hexdigest(rendered)
+
+                    if key in offline_manifest:
+                        continue
+
+                    try:
+                        result = parser.render_node(template, context, node)
+                    except Exception as e:
+                        raise CommandError("An error occured during rendering %s: "
+                                           "%s" % (template.template_name, e))
+                    offline_manifest[key] = result
+                    context.pop()
+                    results.append(result)
+                    count += 1
 
         write_offline_manifest(offline_manifest)
 
