@@ -166,6 +166,8 @@ class Command(NoArgsCommand):
             # Find templates from paths collected by Jinja2's loaders
             if engine == 'jinja2' and django.VERSION >= (1, 8):
                 env = settings.COMPRESS_JINJA2_GET_ENVIRONMENT()
+                if not env:
+                    continue
                 templates |= set([env.loader.get_source(env, template)[1] for template in
                                   env.list_templates(filter_func=lambda _path:
                                   os.path.splitext(_path)[-1] in extensions)])
