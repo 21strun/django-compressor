@@ -89,6 +89,12 @@ def write_offline_manifest(manifest):
     flush_offline_manifest()
 
 
+def extend_offline_manifest(manifest):
+    existing_manifest = get_offline_manifest()
+    existing_manifest.update(manifest)
+    write_offline_manifest(existing_manifest)
+
+
 def get_templatetag_cachekey(compressor, mode, kind):
     return get_cachekey(
         "templatetag.%s.%s.%s" % (compressor.cachekey, mode, kind))

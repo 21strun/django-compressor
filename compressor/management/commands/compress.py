@@ -16,7 +16,7 @@ from django.template.loader import get_template  # noqa Leave this in to preload
 from django.template.utils import InvalidTemplateEngineError
 from django.template import engines
 
-from compressor.cache import get_offline_hexdigest, write_offline_manifest
+from compressor.cache import get_offline_hexdigest, write_offline_manifest, extend_offline_manifest
 from compressor.conf import settings
 from compressor.exceptions import (OfflineGenerationError, TemplateSyntaxError,
                                    TemplateDoesNotExist)
@@ -246,7 +246,10 @@ class Command(BaseCommand):
                     results.append(result)
                     block_count += 1
 
-        write_offline_manifest(offline_manifest)
+        if engine == 'jinja2':
+            extend_offline_manifest(offline_manifest)
+        else:
+            write_offline_manifest(offline_manifest)
 
         log.write("done\nCompressed %d block(s) from %d template(s) for %d context(s).\n" %
                   (block_count, len(compressor_nodes), context_count))
