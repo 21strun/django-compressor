@@ -4,13 +4,13 @@ import sys
 
 from fnmatch import fnmatch
 from optparse import make_option
+from collections import OrderedDict as SortedDict
 
 import django
 from django.core.management.base import NoArgsCommand, CommandError
 import django.template
 from django.template import Context
 from django.utils import six
-from django.utils.datastructures import SortedDict
 from django.utils.importlib import import_module
 from django.template.loader import get_template  # noqa Leave this in to preload template locations
 
