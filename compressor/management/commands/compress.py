@@ -36,23 +36,26 @@ else:
 
 class Command(BaseCommand):
     help = "Compress content outside of the request/response cycle"
-    option_list = BaseCommand.option_list + (
-        make_option('--extension', '-e', action='append', dest='extensions',
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--extension', '-e', action='append', dest='extensions',
             help='The file extension(s) to examine (default: ".html", '
-                'separate multiple extensions with commas, or use -e '
-                'multiple times)'),
-        make_option('-f', '--force', default=False, action='store_true',
+                 'separate multiple extensions with commas, or use -e '
+                 'multiple times)')
+        parser.add_argument(
+            '-f', '--force', default=False, action='store_true', dest='force',
             help="Force the generation of compressed content even if the "
-                "COMPRESS_ENABLED setting is not True.", dest='force'),
-        make_option('--follow-links', default=False, action='store_true',
-            help="Follow symlinks when traversing the COMPRESS_ROOT "
-                "(which defaults to STATIC_ROOT). Be aware that using this "
-                "can lead to infinite recursion if a link points to a parent "
-                "directory of itself.", dest='follow_links'),
-        make_option('--engine', default="django", action="store",
-            help="Specifies the templating engine. jinja2 or django",
-            dest="engine"),
-    )
+                  "COMPRESS_ENABLED setting is not True.")
+        parser.add_argument(
+            '--follow-links', default=False, action='store_true',
+            help="Follow symlinks when traversing the COMPRESS_ROOT (which "
+                 "defaults to STATIC_ROOT). Be aware that using this can "
+                 "lead to infinite recursion if a link points to a parent "
+                 "directory of itself.", dest='follow_links')
+        parser.add_argument(
+            '--engine', default="django", action="store", dest="engine",
+            help="Specifies the templating engine. jinja2 or django")
 
     def get_loaders(self):
         template_source_loaders = []
@@ -97,7 +100,6 @@ class Command(BaseCommand):
         """
         Searches templates containing 'compress' nodes and compresses them
         "offline" -- outside of the request/response cycle.
-
         The result is cached with a cache-key derived from the content of the
         compress nodes (not the content of the possibly linked files!).
         """
@@ -107,14 +109,16 @@ class Command(BaseCommand):
         verbosity = int(options.get("verbosity", 0))
         if not log:
             log = StringIO()
-        if not settings.TEMPLATE_LOADERS:
+
+        template_loaders = self.get_loaders()
+        if not template_loaders:
             raise OfflineGenerationError("No template loaders defined. You "
                                          "must set TEMPLATE_LOADERS in your "
                                          "settings.")
         templates = set()
         if engine == 'django':
             paths = set()
-            for loader in self.get_loaders():
+            for loader in template_loaders:
                 try:
                     module = import_module(loader.__module__)
                     get_template_sources = getattr(module,
@@ -259,10 +263,8 @@ class Command(BaseCommand):
         """
         organizes multiple extensions that are separated with commas or
         passed by using --extension/-e multiple times.
-
         for example: running 'django-admin compress -e js,txt -e xhtml -a'
         would result in an extension list: ['.js', '.txt', '.xhtml']
-
         >>> handle_extensions(['.html', 'html,js,py,py,py,.py', 'py,.py'])
         ['.html', '.js']
         >>> handle_extensions(['.html, txt,.tpl'])
